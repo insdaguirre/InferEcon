@@ -1,5 +1,10 @@
 # InferEcon: Python-Based Econometrics Toolkit
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://inferEcon.streamlit.app)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/insdaguirre/InferEcon)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 A comprehensive Python toolkit that replicates Stata's core econometric functionality through an intuitive Streamlit GUI interface. Built for researchers, students, and practitioners who want the power of Stata with the flexibility of Python.
 
 ## 🎯 **Project Rationale & Design Philosophy**
@@ -141,6 +146,12 @@ To add a new Stata command equivalent:
        return [{"type": "table", "title": "Results", "data": results_df}]
    ```
 3. The function automatically appears in the GUI
+
+## 🌐 **Live Demo**
+
+**Try InferEcon online:** [Live Demo](https://inferEcon.streamlit.app)
+
+*Note: Replace the URL above with your actual deployment link once deployed.*
 
 ## 🔧 **Installation & Setup**
 
