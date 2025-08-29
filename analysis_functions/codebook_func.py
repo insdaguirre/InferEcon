@@ -233,7 +233,7 @@ def apply(df: pd.DataFrame) -> List[dict]:
             len(all_cols),
             len(df),
             round(df.memory_usage(deep=True).sum() / 1024 / 1024, 2),
-            ', '.join(df.dtypes.value_counts().to_dict().keys())
+            ', '.join([str(dtype).split('.')[-1] for dtype in df.dtypes.value_counts().to_dict().keys()])
         ]
     })
     
@@ -318,9 +318,22 @@ def apply(df: pd.DataFrame) -> List[dict]:
     quality_data = []
     for col in cols_to_analyze:
         missing_pct = (df[col].isna().sum() / len(df)) * 100
+        # Handle different dtype formats safely
+        dtype_str = str(df[col].dtype)
+        if 'int' in dtype_str:
+            type_name = 'Integer'
+        elif 'float' in dtype_str:
+            type_name = 'Float'
+        elif 'object' in dtype_str or 'string' in dtype_str:
+            type_name = 'String'
+        elif 'datetime' in dtype_str:
+            type_name = 'DateTime'
+        else:
+            type_name = dtype_str.split('.')[-1] if '.' in dtype_str else dtype_str
+        
         quality_data.append({
             'Variable': col,
-            'Type': str(df[col].dtype),
+            'Type': type_name,
             'Missing %': round(missing_pct, 1),
             'Quality': 'Good' if missing_pct < 5 else 'Fair' if missing_pct < 20 else 'Poor'
         })

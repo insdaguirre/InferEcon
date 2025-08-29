@@ -208,26 +208,33 @@ def apply(df: pd.DataFrame) -> List[dict]:
         other_x_clean = df[other_x_cols][mask] if other_x_cols else pd.DataFrame()
         
         if len(x_clean) > 0:
-            # 1. Added-variable plot
-            avplot_img = _create_avplot(
-                x_clean, y_clean, other_x_clean,
-                x_col, y_col,
-                f"Added-Variable Plot: {y_col} vs {x_col}"
-            )
+            try:
+                # 1. Added-variable plot
+                avplot_img = _create_avplot(
+                    x_clean, y_clean, other_x_clean,
+                    x_col, y_col,
+                    f"Added-Variable Plot: {y_col} vs {x_col}"
+                )
             
-            outputs.append({
-                "type": "image", 
-                "title": f"Added-Variable Plot {i+1}: {y_col} vs {x_col}", 
-                "data": avplot_img
-            })
-            
-            # 2. Partial correlation table
-            partial_corr_table = _create_partial_correlation_table(x_clean, y_clean, other_x_clean)
-            outputs.append({
-                "type": "table", 
-                "title": f"Partial Correlations: {y_col} vs {x_col}", 
-                "data": partial_corr_table
-            })
+                outputs.append({
+                    "type": "image", 
+                    "title": f"Added-Variable Plot {i+1}: {y_col} vs {x_col}", 
+                    "data": avplot_img
+                })
+                
+                # 2. Partial correlation table
+                partial_corr_table = _create_partial_correlation_table(x_clean, y_clean, other_x_clean)
+                outputs.append({
+                    "type": "table", 
+                    "title": f"Partial Correlations: {y_col} vs {x_col}", 
+                    "data": partial_corr_table
+                })
+            except Exception as e:
+                outputs.append({
+                    "type": "text",
+                    "title": f"Error in {x_col} analysis",
+                    "data": f"Could not create added-variable plot for {x_col}: {str(e)}"
+                })
     
     # 3. Interpretation guide
     interpretation = f"""

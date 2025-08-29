@@ -44,7 +44,11 @@ def _create_marginal_effects_plot(df: pd.DataFrame, y_col: str, x_cols: List[str
         
         for x_val in x_range:
             X_means[col] = x_val
-            X_pred = sm.add_constant(X_means.values.reshape(1, -1))
+            # Create prediction array with correct dimensions
+            # We need to ensure the order matches the original X_clean columns
+            X_pred_array = np.array([[X_means[col_name] for col_name in x_cols]])
+            # Manual constant addition since sm.add_constant has issues with numpy arrays
+            X_pred = np.column_stack([np.ones(1), X_pred_array])
             y_pred = model.predict(X_pred)[0]
             marginal_y.append(y_pred)
         
@@ -205,7 +209,7 @@ def _create_predicted_values_table(df: pd.DataFrame, y_col: str, x_cols: List[st
     
     # Scenario 1: All variables at their means
     X_means = X_clean.mean()
-    X_pred_means = sm.add_constant(X_means.values.reshape(1, -1))
+    X_pred_means = np.column_stack([np.ones(1), X_means.values.reshape(1, -1)])
     y_pred_means = model.predict(X_pred_means)[0]
     
     scenarios.append({
@@ -219,7 +223,7 @@ def _create_predicted_values_table(df: pd.DataFrame, y_col: str, x_cols: List[st
         # High scenario (+1 SD)
         X_high = X_means.copy()
         X_high[col] = X_clean[col].mean() + X_clean[col].std()
-        X_pred_high = sm.add_constant(X_high.values.reshape(1, -1))
+        X_pred_high = np.column_stack([np.ones(1), X_high.values.reshape(1, -1)])
         y_pred_high = model.predict(X_pred_high)[0]
         
         scenarios.append({
@@ -231,7 +235,7 @@ def _create_predicted_values_table(df: pd.DataFrame, y_col: str, x_cols: List[st
         # Low scenario (-1 SD)
         X_low = X_means.copy()
         X_low[col] = X_clean[col].mean() - X_clean[col].std()
-        X_pred_low = sm.add_constant(X_low.values.reshape(1, -1))
+        X_pred_low = np.column_stack([np.ones(1), X_low.values.reshape(1, -1)])
         y_pred_low = model.predict(X_pred_low)[0]
         
         scenarios.append({
@@ -246,7 +250,7 @@ def _create_predicted_values_table(df: pd.DataFrame, y_col: str, x_cols: List[st
         X_high_high = X_means.copy()
         X_high_high[x_cols[0]] = X_clean[x_cols[0]].mean() + X_clean[x_cols[0]].std()
         X_high_high[x_cols[1]] = X_clean[x_cols[1]].mean() + X_clean[x_cols[1]].std()
-        X_pred_high_high = sm.add_constant(X_high_high.values.reshape(1, -1))
+        X_pred_high_high = np.column_stack([np.ones(1), X_high_high.values.reshape(1, -1)])
         y_pred_high_high = model.predict(X_pred_high_high)[0]
         
         scenarios.append({

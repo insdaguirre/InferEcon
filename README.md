@@ -149,9 +149,9 @@ To add a new Stata command equivalent:
 
 ## 🌐 **Live Demo**
 
-**Try InferEcon online:** [Live Demo](https://inferEcon.streamlit.app)
+**Try InferEcon online:** [Live Demo](https://inferecon.streamlit.app/)
 
-*Note: Replace the URL above with your actual deployment link once deployed.*
+*Your econometrics toolkit is now live and ready to use!*
 
 ## 🔧 **Installation & Setup**
 
