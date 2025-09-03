@@ -182,7 +182,7 @@ def _create_partial_correlation_table(x: pd.Series, y: pd.Series, other_x: pd.Da
     
     return partial_df
 
-def apply(df: pd.DataFrame) -> List[dict]:
+def apply(df: pd.DataFrame, config: dict = None) -> List[dict]:
     """Create added-variable plots (partial regression plots)."""
     outputs = []
     
@@ -192,49 +192,96 @@ def apply(df: pd.DataFrame) -> List[dict]:
     if len(numeric_cols) < 2:
         return [{"type": "text", "title": "Avplot", "data": "Need at least 2 numeric variables for added-variable plots."}]
     
-    # Use first column as y, others as x variables
-    y_col = numeric_cols[0]
-    x_cols = numeric_cols[1:min(6, len(numeric_cols))]  # Limit to 5 x variables
-    
-    # Create added-variable plots for each x variable
-    for i, x_col in enumerate(x_cols):
-        # Remove missing values
+    # Use configuration if provided, otherwise use defaults
+    if config and 'y_col' in config and 'x_col' in config:
+        y_col = config['y_col']
+        x_col = config['x_col']
+        control_vars = config.get('control_vars', [])
+        
+        # Create added-variable plot for the specified variable
         mask = ~(df[y_col].isna() | df[x_col].isna())
+        if control_vars:
+            mask = mask & ~df[control_vars].isna().any(axis=1)
+        
         y_clean = df[y_col][mask]
         x_clean = df[x_col][mask]
+        other_x = df[control_vars][mask] if control_vars else pd.DataFrame()
         
-        # Get other x variables
-        other_x_cols = [col for col in x_cols if col != x_col]
-        other_x_clean = df[other_x_cols][mask] if other_x_cols else pd.DataFrame()
-        
-        if len(x_clean) > 0:
+        if len(y_clean) < 10:
+            outputs.append({
+                "type": "text", 
+                "title": "Avplot", 
+                "data": f"Insufficient overlapping data for {x_col} added-variable plot."
+            })
+        else:
+            # Create the added-variable plot
             try:
-                # 1. Added-variable plot
-                avplot_img = _create_avplot(
-                    x_clean, y_clean, other_x_clean,
-                    x_col, y_col,
-                    f"Added-Variable Plot: {y_col} vs {x_col}"
-                )
-            
+                plot_img = _create_avplot(x_clean, y_clean, other_x, x_col, y_col, 
+                                        f"Added-Variable Plot: {x_col} | {', '.join(control_vars) if control_vars else 'None'}")
                 outputs.append({
                     "type": "image", 
-                    "title": f"Added-Variable Plot {i+1}: {y_col} vs {x_col}", 
-                    "data": avplot_img
+                    "title": f"Added-Variable Plot: {x_col}", 
+                    "data": plot_img
                 })
                 
-                # 2. Partial correlation table
-                partial_corr_table = _create_partial_correlation_table(x_clean, y_clean, other_x_clean)
+                # Create partial correlation table
+                corr_table = _create_partial_correlation_table(x_clean, y_clean, other_x, x_col, y_col)
                 outputs.append({
                     "type": "table", 
-                    "title": f"Partial Correlations: {y_col} vs {x_col}", 
-                    "data": partial_corr_table
+                    "title": f"Partial Correlation: {x_col}", 
+                    "data": corr_table
                 })
+                
             except Exception as e:
                 outputs.append({
-                    "type": "text",
-                    "title": f"Error in {x_col} analysis",
-                    "data": f"Could not create added-variable plot for {x_col}: {str(e)}"
+                    "type": "text", 
+                    "title": "Avplot Error", 
+                    "data": f"Error creating added-variable plot: {str(e)}"
                 })
+    else:
+        # Fallback to default behavior - create plots for multiple variables
+        y_col = numeric_cols[0]
+        x_cols = numeric_cols[1:min(6, len(numeric_cols))]  # Limit to 5 x variables
+        
+        # Create added-variable plots for each x variable
+        for i, x_col in enumerate(x_cols):
+            # Remove missing values
+            mask = ~(df[y_col].isna() | df[x_col].isna())
+            y_clean = df[y_col][mask]
+            x_clean = df[x_col][mask]
+            
+            # Get other x variables
+            other_x_cols = [col for col in x_cols if col != x_col]
+            other_x_clean = df[other_x_cols][mask] if other_x_cols else pd.DataFrame()
+            
+            if len(x_clean) > 0:
+                try:
+                    # 1. Added-variable plot
+                    avplot_img = _create_avplot(
+                        x_clean, y_clean, other_x_clean,
+                        x_col, y_col,
+                        f"Added-Variable Plot: {y_col} vs {x_col}"
+                    )
+                
+                    outputs.append({
+                        "type": "image", 
+                        "title": f"Added-Variable Plot {i+1}: {y_col} vs {x_col}", 
+                        "data": avplot_img
+                    })
+                    
+                    # 2. Partial correlation table
+                    partial_corr_table = _create_partial_correlation_table(x_clean, y_clean, other_x_clean)
+                    outputs.append({
+                        "type": "table", 
+                        "title": f"Partial Correlations: {y_col} vs {x_col}", 
+                        "data": partial_corr_table
+                    })
+                except Exception as e:
+                    outputs.append({
+                        "type": "text",
+                        "title": f"Error in {x_col} analysis",
+                        "data": f"Could not create added-variable plot for {x_col}: {str(e)}"
+                    })
     
     # 3. Interpretation guide
     interpretation = f"""
@@ -276,3 +323,7 @@ def apply(df: pd.DataFrame) -> List[dict]:
     })
     
     return outputs
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Apply added-variable plots with configuration parameters."""
+    return apply(df, config)

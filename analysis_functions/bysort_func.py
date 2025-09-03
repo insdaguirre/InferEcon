@@ -279,7 +279,7 @@ def _perform_group_comparison_tests(df: pd.DataFrame, group_col: str, var_col: s
         'pairwise': pairwise_results
     }
 
-def apply(df: pd.DataFrame) -> List[dict]:
+def apply(df: pd.DataFrame, config: dict = None) -> List[dict]:
     """Perform grouped summary analysis."""
     outputs = []
     
@@ -289,18 +289,84 @@ def apply(df: pd.DataFrame) -> List[dict]:
     if len(all_cols) < 2:
         return [{"type": "text", "title": "Bysort", "data": "Need at least 2 variables for grouped analysis."}]
     
-    # For demonstration, create a simple grouping variable
-    # In practice, you'd want user input for group and variable selection
+    # Use configuration if provided, otherwise use defaults
+    if config and 'group_col' in config and 'var_col' in config:
+        group_col = config['group_col']
+        var_col = config['var_col']
+        grouping_method = config.get('grouping_method', 'Quartiles')
+        n_bins = config.get('n_bins', 4)
+        
+        # Create groups based on configuration
+        df_copy = df.copy()
+        
+        if grouping_method == "Categories":
+            # Use categorical variable as-is
+            df_copy['group'] = df_copy[group_col].astype(str)
+        else:
+            # Create numeric groups
+            if grouping_method == "Custom bins":
+                df_copy['group'] = pd.cut(df_copy[group_col], bins=n_bins, labels=[f'Bin_{i+1}' for i in range(n_bins)], duplicates='drop')
+            else:
+                # Quartiles, Quintiles, Deciles
+                df_copy['group'] = pd.qcut(df_copy[group_col], q=n_bins, labels=[f'Q{i+1}' for i in range(n_bins)], duplicates='drop')
+        
+        # Remove rows with NaN groups
+        df_copy = df_copy.dropna(subset=['group'])
+        
+        if len(df_copy) < 10:
+            return [{"type": "text", "title": "Bysort", "data": "Insufficient data for grouped analysis after grouping."}]
+        
+        # Perform grouped analysis
+        try:
+            # 1. Grouped Summary Statistics
+            grouped_stats = _create_grouped_summary_table(df_copy, 'group', var_col)
+            outputs.append({
+                "type": "table", 
+                "title": f"Grouped Summary: {var_col} by {group_col}", 
+                "data": grouped_stats
+            })
+            
+            # 2. Grouped Box Plot
+            boxplot_img = _create_grouped_boxplot(df_copy, 'group', var_col)
+            outputs.append({
+                "type": "image", 
+                "title": f"Box Plot: {var_col} by {group_col}", 
+                "data": boxplot_img
+            })
+            
+            # 3. Grouped Histogram
+            hist_img = _create_grouped_histogram(df_copy, 'group', var_col)
+            outputs.append({
+                "type": "image", 
+                "title": f"Histogram: {var_col} by {group_col}", 
+                "data": hist_img
+            })
+            
+            # 4. Group Comparison Tests
+            comparison_tests = _perform_group_comparison_tests(df_copy, 'group', var_col)
+            outputs.append({
+                "type": "table", 
+                "title": f"Group Comparison Tests: {var_col}", 
+                "data": comparison_tests
+            })
+            
+        except Exception as e:
+            outputs.append({
+                "type": "text", 
+                "title": "Bysort Error", 
+                "data": f"Error performing grouped analysis: {str(e)}"
+            })
     
-    # Create a simple group variable (e.g., based on first numeric column)
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    
-    if len(numeric_cols) < 2:
-        return [{"type": "text", "title": "Bysort", "data": "Need at least 2 numeric variables for grouped analysis."}]
-    
-    # Use first numeric column as grouping variable, second as analysis variable
-    group_col = numeric_cols[0]
-    var_col = numeric_cols[1]
+    else:
+        # Fallback to default behavior
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if len(numeric_cols) < 2:
+            return [{"type": "text", "title": "Bysort", "data": "Need at least 2 numeric variables for grouped analysis."}]
+        
+        # Use first numeric column as grouping variable, second as analysis variable
+        group_col = numeric_cols[0]
+        var_col = numeric_cols[1]
     
     # Create discrete groups (e.g., quartiles)
     df_copy = df.copy()
@@ -460,3 +526,7 @@ def apply(df: pd.DataFrame) -> List[dict]:
     })
     
     return outputs
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Apply grouped analysis with configuration parameters."""
+    return apply(df, config)

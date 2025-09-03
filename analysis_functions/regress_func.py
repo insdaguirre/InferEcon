@@ -92,7 +92,7 @@ def _ramsey_reset_test(model, X: pd.DataFrame, y: pd.Series) -> dict:
     except Exception as e:
         return {'Error': f'Could not compute: {str(e)}'}
 
-def apply(df: pd.DataFrame) -> List[dict]:
+def apply(df: pd.DataFrame, config: dict = None) -> List[dict]:
     """Perform OLS regression with comprehensive diagnostics."""
     outputs = []
     
@@ -102,10 +102,14 @@ def apply(df: pd.DataFrame) -> List[dict]:
     if len(numeric_cols) < 2:
         return [{"type": "text", "title": "Regress", "data": "Need at least 2 numeric variables for regression analysis."}]
     
-    # For demonstration, use first column as dependent variable, others as independent
-    # In a real app, you'd want user input for variable selection
-    y_col = numeric_cols[0]
-    X_cols = numeric_cols[1:min(6, len(numeric_cols))]  # Limit to 5 independent variables
+    # Use configuration if provided, otherwise use defaults
+    if config and 'y_col' in config and 'x_cols' in config:
+        y_col = config['y_col']
+        X_cols = config['x_cols']
+    else:
+        # Fallback to default behavior
+        y_col = numeric_cols[0]
+        X_cols = numeric_cols[1:min(6, len(numeric_cols))]  # Limit to 5 independent variables
     
     # Prepare data
     y = df[y_col].dropna()
@@ -303,3 +307,7 @@ def apply(df: pd.DataFrame) -> List[dict]:
         })
     
     return outputs
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Apply regression with configuration parameters."""
+    return apply(df, config)

@@ -82,6 +82,41 @@ Traditional econometric software like Stata, while powerful, has several limitat
 - `bysort` - Grouped analysis and comparisons
 - `collapse` - Data aggregation by groups
 
+## ⚙️ **Interactive Configuration Interface**
+
+### **Smart Function Configuration**
+Many functions now include **interactive configuration menus** that appear when you select them, allowing you to:
+
+- **Specify Variables**: Choose exactly which variables to use for each analysis
+- **Set Parameters**: Configure grouping methods, aggregation functions, and other options
+- **Customize Analysis**: Tailor each function to your specific research needs
+
+### **Functions with Configuration Menus**
+
+#### **Regression & Analysis Functions**
+- **`regress`** - Select dependent and independent variables
+- **`avplot`** - Choose variable to plot and control variables
+- **`margins`** - Specify variables for marginal effects analysis
+
+#### **Panel Data Functions**
+- **`xtreg`** - Configure panel structure and variable selection
+- **`areg`** - Set up fixed effects and variable specifications
+- **`hausman`** - Define panel structure for FE vs RE comparison
+
+#### **Instrumental Variables**
+- **`ivregress`** - Select dependent variable, endogenous variable, instrument, and controls
+
+#### **Grouped Analysis**
+- **`bysort`** - Choose grouping variable, analysis variable, and grouping method
+- **`collapse`** - Select grouping variables, aggregation variables, and functions
+
+### **Configuration Features**
+- **Smart Detection**: Only shows configuration for functions that need it
+- **User-Friendly Interface**: Clear dropdowns, multi-select boxes, and sliders
+- **Data Type Awareness**: Automatically detects numeric vs categorical variables
+- **Validation**: Ensures your selections are valid before running analysis
+- **Flexible Options**: Multiple grouping methods, aggregation functions, and parameter settings
+
 ## 🛠️ **Technical Architecture**
 
 ### **Core Components**
@@ -117,7 +152,28 @@ apply(df: pd.DataFrame)    # Main function that processes data
 
 ## 📊 **Usage Examples**
 
-### **Basic Workflow**
+### **Interactive Workflow**
+1. **Upload Data**: Load your CSV file through the web interface
+2. **Select Functions**: Choose which analyses to run from the sidebar
+3. **Configure Parameters**: **NEW!** Specify variables and settings for each function
+4. **Run Analysis**: Execute all selected functions with your configurations
+5. **View Results**: See tables, plots, and interpretations
+6. **Export Report**: Download complete HTML report
+
+### **Configuration Example**
+When you select functions like `regress` or `bysort`, configuration menus appear:
+
+**For Regression Analysis:**
+- Select dependent variable (Y) from dropdown
+- Choose independent variables (X) with multi-select
+- Automatic validation ensures valid selections
+
+**For Grouped Analysis:**
+- Pick grouping variable (e.g., income quartiles)
+- Select variable to analyze (e.g., test scores)
+- Choose grouping method (quartiles, quintiles, custom bins)
+
+### **Programmatic Usage**
 ```python
 # The GUI handles this automatically, but here's what happens:
 from analysis_functions.summarize_func import apply as summarize
@@ -126,9 +182,9 @@ from analysis_functions.regress_func import apply as regress
 # Load data
 df = pd.read_csv('your_data.csv')
 
-# Run analyses
-summary_results = summarize(df)
-regression_results = regress(df)
+# Run analyses with configuration
+config = {'y_col': 'income', 'x_cols': ['education', 'experience']}
+regression_results = regress(df, config)
 
 # Results are automatically formatted and displayed
 ```
@@ -141,11 +197,23 @@ To add a new Stata command equivalent:
    ```python
    display_name = "New Command"
    
-   def apply(df: pd.DataFrame) -> List[dict]:
+   def apply(df: pd.DataFrame, config: dict = None) -> List[dict]:
        # Your analysis logic here
+       # Use config parameter for user-specified variables/parameters
        return [{"type": "table", "title": "Results", "data": results_df}]
+   
+   def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+       """Optional: For functions that need configuration"""
+       return apply(df, config)
    ```
-3. The function automatically appears in the GUI
+3. **For functions needing configuration**, add to `config_interface.py`:
+   ```python
+   FUNCTION_CONFIGS = {
+       'New Command': YourConfigClass,
+       # ... existing configs
+   }
+   ```
+4. The function automatically appears in the GUI with configuration support
 
 ## 🌐 **Live Demo**
 

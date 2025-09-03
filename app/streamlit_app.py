@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import base64
 import io
-from typing import List
+from typing import List, Dict, Any
 
 import pandas as pd
 import streamlit as st
 
 # Import should work now since this script is launched by run_app.py
 from analysis_functions import load_functions
+from analysis_functions.config_interface import get_function_config, FUNCTION_CONFIGS
 
 st.set_page_config(page_title="Econometrics Toolkit", layout="wide")
 st.title("Econometrics Toolkit")
@@ -25,7 +26,30 @@ for func in available_funcs:
     if st.sidebar.checkbox(func.display_name, value=(func.display_name == "Summarize")):
         selected.append(func)
 
-run = st.sidebar.button("Run")
+# Show configuration for selected functions that need it
+configurations: Dict[str, Dict[str, Any]] = {}
+if uploaded_file is not None and selected:
+    try:
+        df = pd.read_csv(uploaded_file)
+        
+        # Check if any selected functions need configuration
+        config_needed = [func for func in selected if func.display_name in FUNCTION_CONFIGS]
+        
+        if config_needed:
+            st.header("3) Configure Functions")
+            st.markdown("Some functions require additional configuration. Please specify the variables and parameters below:")
+            
+            for func in config_needed:
+                with st.expander(f"Configure {func.display_name}", expanded=True):
+                    config = get_function_config(func.display_name, df)
+                    if config:  # Only store if configuration was successful
+                        configurations[func.display_name] = config
+                    else:
+                        st.warning(f"Configuration incomplete for {func.display_name}")
+    except Exception as exc:
+        st.error(f"Failed to read CSV for configuration: {exc}")
+
+run = st.sidebar.button("Run Analysis")
 
 def _build_report_html(outputs: List[dict]) -> str:
     parts = [
@@ -57,7 +81,19 @@ if run:
         all_outputs: List[dict] = []
         for func in selected:
             try:
-                outputs = func.apply(df)
+                # Check if this function needs configuration
+                if func.display_name in configurations:
+                    # Pass configuration to the function
+                    config = configurations[func.display_name]
+                    if hasattr(func, 'apply_with_config'):
+                        outputs = func.apply_with_config(df, config)
+                    else:
+                        # Fallback to regular apply if function doesn't support config yet
+                        outputs = func.apply(df)
+                else:
+                    # No configuration needed
+                    outputs = func.apply(df)
+                
                 all_outputs.extend(outputs)
             except Exception as exc:
                 st.error(f"{func.display_name} failed: {exc}")
