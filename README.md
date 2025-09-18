@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A comprehensive Python toolkit that replicates Stata's core econometric functionality through an intuitive Streamlit GUI interface. Built for researchers, students, and practitioners who want the power of Stata with the flexibility of Python.
+An attempt to build stata using Python. 
 
 ## 🎯 **Project Rationale & Design Philosophy**
 
