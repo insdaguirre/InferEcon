@@ -65,6 +65,11 @@ configurations: dict = {}
 if uploaded_file is not None and selected:
     try:
         df_for_config = pd.read_csv(uploaded_file)
+        # Rewind buffer so it can be read again later when running
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
         # Which selected functions need configuration?
         config_needed = [f for f in selected if getattr(f, 'display_name', '') in FUNCTION_CONFIGS]
         if config_needed:
@@ -157,6 +162,11 @@ elif run:
     st.subheader("🔍 Analysis Results")
     
     try:
+        # Ensure the uploaded file pointer is at the start before reading
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
         df = pd.read_csv(uploaded_file)
         st.success(f"✅ Successfully loaded dataset with {len(df)} rows and {len(df.columns)} columns")
         

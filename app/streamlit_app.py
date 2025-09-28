@@ -31,6 +31,10 @@ configurations: Dict[str, Dict[str, Any]] = {}
 if uploaded_file is not None and selected:
     try:
         df = pd.read_csv(uploaded_file)
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
         
         # Check if any selected functions need configuration
         config_needed = [func for func in selected if func.display_name in FUNCTION_CONFIGS]
@@ -73,6 +77,10 @@ if run:
         st.warning("Please upload a CSV first.")
     else:
         try:
+            try:
+                uploaded_file.seek(0)
+            except Exception:
+                pass
             df = pd.read_csv(uploaded_file)
         except Exception as exc:
             st.error(f"Failed to read CSV: {exc}")
