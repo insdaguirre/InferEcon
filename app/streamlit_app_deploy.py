@@ -218,7 +218,12 @@ elif run:
             if item["type"] == "table":
                 st.dataframe(item["data"], use_container_width=True)
             elif item["type"] == "image":
-                st.image(base64.b64decode(item["data"]))
+                try:
+                    img_bytes = base64.b64decode(item["data"])
+                except Exception:
+                    img_bytes = None
+                if img_bytes:
+                    st.image(io.BytesIO(img_bytes), use_container_width=True)
             elif item["type"] == "text":
                 st.write(item["data"])
         
