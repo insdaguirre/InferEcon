@@ -341,3 +341,86 @@ def apply(df: pd.DataFrame) -> List[dict]:
         })
     
     return outputs
+
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Perform IV estimation using user-selected columns from configuration.
+
+    Expected config keys:
+    - y_col: dependent variable name
+    - x_col: endogenous regressor name
+    - z_col: instrument column name (or multiple instruments list)
+    - control_vars: optional list of control variable names
+    """
+    outputs: List[dict] = []
+    try:
+        y_col = config.get('y_col')
+        x_col = config.get('x_col')
+        z_col = config.get('z_col')
+        control_cols = config.get('control_vars', []) or []
+        if not y_col or not x_col or not z_col:
+            return apply(df)
+        # Support multiple instruments if user provided a list
+        z_df = df[[z_col]] if isinstance(z_col, str) else df[z_col]
+        mask = ~(df[y_col].isna() | df[x_col].isna() | z_df.isna().any(axis=1))
+        if control_cols:
+            mask = mask & ~df[control_cols].isna().any(axis=1)
+        y = df.loc[mask, y_col]
+        x = df.loc[mask, x_col]
+        z = z_df.loc[mask]
+        controls = df.loc[mask, control_cols] if control_cols else pd.DataFrame()
+        if len(y) < 10:
+            return [{"type": "text", "title": "Ivregress", "data": "Insufficient overlapping data for IV estimation."}]
+        iv_results = _calculate_iv_statistics(y, x, z, controls)
+        # Reuse reporting from default apply by building minimal tables
+        first_stage = iv_results['first_stage']
+        first_stage_table = pd.DataFrame({
+            'Statistic': ['R-squared', 'F-statistic', 'F P-value', 'Observations'],
+            'Value': [first_stage['r_squared'], first_stage['f_stat'], first_stage['f_pval'], len(y)]
+        })
+        first_stage_table['Value'] = first_stage_table['Value'].round(4)
+        outputs.append({"type": "table", "title": "First Stage Results", "data": first_stage_table})
+        second_stage = iv_results['second_stage']
+        coef_table = pd.DataFrame({
+            'Variable': second_stage['coefficients'].index,
+            'Coefficient': second_stage['coefficients'].values,
+            'Std. Error': second_stage['std_errors'].values,
+            't-statistic': second_stage['t_values'].values,
+            'P-value': second_stage['p_values'].values
+        })
+        for c in ['Coefficient', 'Std. Error', 't-statistic', 'P-value']:
+            coef_table[c] = coef_table[c].round(4)
+        outputs.append({"type": "table", "title": "Second Stage Results - Coefficient Estimates", "data": coef_table})
+        model_summary = pd.DataFrame({
+            'Statistic': ['R-squared', 'Adjusted R-squared', 'Observations'],
+            'Value': [second_stage['r_squared'], second_stage['adj_r_squared'], len(y)]
+        })
+        model_summary['Value'] = model_summary['Value'].round(4)
+        outputs.append({"type": "table", "title": "IV Model Summary", "data": model_summary})
+        weak_instruments = iv_results['weak_instruments']
+        weak_tbl = pd.DataFrame({'Test': ['F-statistic', 'P-value', 'R-squared'], 'Value': [weak_instruments['f_statistic'], weak_instruments['f_pvalue'], weak_instruments['r_squared']]})
+        weak_tbl['Value'] = weak_tbl['Value'].round(4)
+        outputs.append({"type": "table", "title": "Weak Instruments Test", "data": weak_tbl})
+        if iv_results['overidentification']:
+            overid = iv_results['overidentification']
+            over_tbl = pd.DataFrame({'Test': ['J-statistic', 'P-value', 'Degrees of Freedom'], 'Value': [overid['j_statistic'], overid['j_pvalue'], overid['df']]})
+            over_tbl['Value'] = over_tbl['Value'].round(4)
+            outputs.append({"type": "table", "title": "Overidentification Test (Hansen's J)", "data": over_tbl})
+        if iv_results['endogeneity']:
+            end = iv_results['endogeneity']
+            end_tbl = pd.DataFrame({'Test': ['DWH Statistic', 'P-value', 'OLS Coef', 'IV Coef', 'Difference'], 'Value': [end['dwh_statistic'], end['dwh_pvalue'], end['ols_coefficient'], end['iv_coefficient'], end['difference']]})
+            end_tbl['Value'] = end_tbl['Value'].round(4)
+            outputs.append({"type": "table", "title": "Endogeneity Test (Durbin-Wu-Hausman)", "data": end_tbl})
+        interpretation = f"""
+**Instrumental Variables (2SLS) Analysis Results:**
+
+**Model Specification:**
+- **Dependent Variable**: {y_col}
+- **Endogenous Variable**: {x_col}
+- **Instrument(s)**: {z_col if isinstance(z_col, str) else ', '.join(z_col)}
+- **Control Variables**: {', '.join(control_cols) if control_cols else 'None'}
+"""
+        outputs.append({"type": "text", "title": "IV Analysis Interpretation", "data": interpretation})
+        return outputs
+    except Exception as exc:
+        return [{"type": "text", "title": "IV Estimation Error", "data": f"Error performing IV estimation: {str(exc)}"}]

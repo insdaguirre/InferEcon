@@ -319,7 +319,7 @@ def apply(df: pd.DataFrame, config: dict = None) -> List[dict]:
         # Perform grouped analysis
         try:
             # 1. Grouped Summary Statistics
-            grouped_stats = _create_grouped_summary_table(df_copy, 'group', var_col)
+            grouped_stats = _create_grouped_summary(df_copy, 'group', var_col)
             outputs.append({
                 "type": "table", 
                 "title": f"Grouped Summary: {var_col} by {group_col}", 

@@ -287,3 +287,30 @@ def apply(df: pd.DataFrame) -> List[dict]:
     })
     
     return outputs
+
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Create twoway and diagnostics using selected y and x columns."""
+    try:
+        y_col = config.get('y_col')
+        x_cols = config.get('x_cols', [])
+        if not y_col or not x_cols:
+            return apply(df)
+        outputs: List[dict] = []
+        for i, x_col in enumerate(x_cols):
+            mask = ~(df[y_col].isna() | df[x_col].isna())
+            x_clean = df[x_col][mask]
+            y_clean = df[y_col][mask]
+            if len(x_clean) == 0:
+                continue
+            twoway_plot = _create_twoway_plot(x_clean, y_clean, x_col, y_col, f"Twoway: {y_col} vs {x_col}")
+            outputs.append({"type": "image", "title": f"Twoway Plot: {y_col} vs {x_col}", "data": twoway_plot})
+            residual_plot = _create_residual_plot(x_clean, y_clean, x_col, y_col)
+            outputs.append({"type": "image", "title": f"Residual Diagnostics: {y_col} vs {x_col}", "data": residual_plot})
+            summary_table = _create_regression_summary_table(x_clean, y_clean)
+            outputs.append({"type": "table", "title": f"Regression Summary: {y_col} vs {x_col}", "data": summary_table})
+        if not outputs:
+            return [{"type": "text", "title": "Twoway", "data": "No valid data after applying selections."}]
+        return outputs
+    except Exception as exc:
+        return [{"type": "text", "title": "Twoway Error", "data": f"Error creating twoway plots: {str(exc)}"}]

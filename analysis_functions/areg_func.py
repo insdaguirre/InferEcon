@@ -362,3 +362,65 @@ def apply(df: pd.DataFrame) -> List[dict]:
     })
     
     return outputs
+
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Run absorption model using selected Y/X and optional FE columns or synthesized ids."""
+    outputs: List[dict] = []
+    try:
+        y_col = config.get('y_col')
+        x_cols = config.get('x_cols', [])
+        fe_cols = config.get('fe_cols', []) or []
+        create_panel = config.get('create_panel', False)
+        n_entities = config.get('n_entities')
+        if not y_col or not x_cols:
+            return apply(df)
+        df_panel = df.copy()
+        # If user didn't provide FE columns, synthesize panel ids so model can run
+        if not fe_cols or create_panel:
+            n = len(df_panel)
+            if not n_entities:
+                n_entities = max(3, min(15, max(3, n // 3)))
+            ent = np.repeat(range(n_entities), max(1, n // n_entities))
+            if len(ent) < n:
+                ent = np.append(ent, [ent[-1]] * (n - len(ent)))
+            tvals = np.tile(range(max(1, n // max(1, n_entities))), n_entities)
+            if len(tvals) < n:
+                tvals = np.append(tvals, [tvals[-1]] * (n - len(tvals)))
+            df_panel['entity_id'] = ent[:n]
+            df_panel['time_id'] = tvals[:n]
+            if 'group_id' not in df_panel.columns:
+                df_panel['group_id'] = np.random.choice(range(min(8, n_entities // 2 if n_entities else 4)), n)
+            fe_cols = ['entity_id', 'time_id', 'group_id']
+        mask = ~(df_panel[y_col].isna() | df_panel[x_cols].isna().any(axis=1))
+        y = df_panel[y_col][mask]
+        X = df_panel[x_cols][mask]
+        if len(y) < 20:
+            return [{"type": "text", "title": "Areg", "data": "Insufficient overlapping data for fixed effects analysis."}]
+        fe_stats = _calculate_fe_statistics(df_panel, fe_cols)
+        fe_summary_table = _create_fe_summary_table(fe_stats)
+        outputs.append({"type": "table", "title": "Fixed Effects Structure", "data": fe_summary_table})
+        fe_tests = _perform_fe_tests(y, X, fe_cols, df_panel)
+        if fe_tests:
+            fe_test_data = []
+            for fe_col, test_dict in fe_tests.items():
+                fe_test_data.append({'Fixed Effect': fe_col, 'F-statistic': test_dict['f_statistic'], 'P-value': test_dict['f_pvalue'], 'DF Numerator': test_dict['df_numerator'], 'DF Denominator': test_dict['df_denominator']})
+            fe_test_table = pd.DataFrame(fe_test_data)
+            for c in ['F-statistic', 'P-value', 'DF Numerator', 'DF Denominator']:
+                fe_test_table[c] = fe_test_table[c].round(4)
+            outputs.append({"type": "table", "title": "Fixed Effects Significance Tests", "data": fe_test_table})
+        areg_results = _absorb_fixed_effects(y, X, fe_cols, df_panel)
+        if areg_results:
+            coef_table = pd.DataFrame({
+                'Variable': areg_results['coefficients'].index,
+                'Coefficient': areg_results['coefficients'].values,
+                'Std. Error': areg_results['std_errors'].values,
+                't-statistic': areg_results['t_values'].values,
+                'P-value': areg_results['p_values'].values
+            })
+            for c in ['Coefficient', 'Std. Error', 't-statistic', 'P-value']:
+                coef_table[c] = coef_table[c].round(4)
+            outputs.append({"type": "table", "title": "Fixed Effects Absorption Results", "data": coef_table})
+        return outputs
+    except Exception as exc:
+        return [{"type": "text", "title": "Fixed Effects Absorption Error", "data": f"Error performing fixed effects absorption: {str(exc)}"}]

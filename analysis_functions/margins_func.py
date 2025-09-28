@@ -378,3 +378,56 @@ def apply(df: pd.DataFrame) -> List[dict]:
     })
     
     return outputs
+
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Run marginal effects using selected y and x columns if provided."""
+    try:
+        y_col = config.get('y_col')
+        x_cols = config.get('x_cols', [])
+        # If config is incomplete, fallback to default behavior
+        if not y_col or not x_cols:
+            return apply(df)
+        outputs: List[dict] = []
+        # 1. Marginal effects plot
+        marginal_plot = _create_marginal_effects_plot(df, y_col, x_cols)
+        if marginal_plot:
+            outputs.append({"type": "image", "title": "Marginal Effects Plot", "data": marginal_plot})
+        # 2. Interaction plot
+        if len(x_cols) >= 2:
+            interaction_plot = _create_interaction_plot(df, y_col, x_cols)
+            if interaction_plot:
+                outputs.append({"type": "image", "title": "Interaction Effects Plot", "data": interaction_plot})
+        # 3. Predicted values table
+        pred_table = _create_predicted_values_table(df, y_col, x_cols)
+        if not pred_table.empty:
+            outputs.append({"type": "table", "title": "Predicted Values at Different Scenarios", "data": pred_table})
+        # 4. Marginal effects summary
+        mask = ~(df[y_col].isna() | df[x_cols].isna().any(axis=1))
+        y_clean = df[y_col][mask]
+        X_clean = df[x_cols][mask]
+        if len(y_clean) > 0:
+            X_with_const = sm.add_constant(X_clean)
+            model = sm.OLS(y_clean, X_with_const).fit()
+            marginal_summary = []
+            for col in x_cols:
+                marginal_summary.append({
+                    'Variable': col,
+                    'Coefficient': model.params[col],
+                    'Std. Error': model.bse[col],
+                    't-statistic': model.tvalues[col],
+                    'P-value': model.pvalues[col],
+                    'Marginal Effect': f'{model.params[col]:.4f} units per unit change in {col}'
+                })
+            marginal_df = pd.DataFrame(marginal_summary)
+            for c in ['Coefficient', 'Std. Error', 't-statistic', 'P-value']:
+                marginal_df[c] = marginal_df[c].round(4)
+            outputs.append({"type": "table", "title": "Marginal Effects Summary", "data": marginal_df})
+        # Interpretation section reused
+        interpretation = f"""
+**Marginal Effects Analysis for {y_col}:**
+"""
+        outputs.append({"type": "text", "title": "Marginal Effects Interpretation Guide", "data": interpretation})
+        return outputs
+    except Exception as exc:
+        return [{"type": "text", "title": "Margins Error", "data": f"Error computing marginal effects: {str(exc)}"}]

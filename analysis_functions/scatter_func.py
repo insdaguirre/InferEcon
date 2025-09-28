@@ -221,3 +221,26 @@ def apply(df: pd.DataFrame) -> List[dict]:
     })
     
     return outputs
+
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Create scatter plots honoring user-selected y and x columns."""
+    try:
+        y_col = config.get('y_col')
+        x_cols = config.get('x_cols', [])
+        if not y_col or not x_cols:
+            return apply(df)
+        outputs: List[dict] = []
+        for i, x_col in enumerate(x_cols):
+            mask = ~(df[y_col].isna() | df[x_col].isna())
+            x_clean = df[x_col][mask]
+            y_clean = df[y_col][mask]
+            if len(x_clean) == 0:
+                continue
+            plot_str = _create_scatter_plot(x_clean, y_clean, x_col, y_col, f"Scatter: {y_col} vs {x_col}")
+            outputs.append({"type": "image", "title": f"Scatter: {y_col} vs {x_col}", "data": plot_str})
+        if not outputs:
+            return [{"type": "text", "title": "Scatter", "data": "No valid data after applying selections."}]
+        return outputs
+    except Exception as exc:
+        return [{"type": "text", "title": "Scatter Error", "data": f"Error creating scatter plots: {str(exc)}"}]

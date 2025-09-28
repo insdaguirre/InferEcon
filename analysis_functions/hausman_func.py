@@ -397,3 +397,68 @@ we performed individual t-tests comparing FE vs RE coefficients.
         })
     
     return outputs
+
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Run Hausman test using selected y/x and either provided or synthesized panel ids."""
+    try:
+        y_col = config.get('y_col')
+        x_cols = config.get('x_cols', [])
+        entity_col = config.get('entity_col')
+        time_col = config.get('time_col')
+        create_panel = config.get('create_panel', False)
+        n_entities = config.get('n_entities')
+        if not y_col or not x_cols:
+            return apply(df)
+        df_panel = df.copy()
+        if create_panel or not (entity_col and time_col and entity_col in df.columns and time_col in df.columns):
+            n = len(df)
+            if not n_entities:
+                n_entities = max(2, min(10, n // 5))
+            ent = np.repeat(range(n_entities), max(1, n // n_entities))
+            if len(ent) < n:
+                ent = np.append(ent, [ent[-1]] * (n - len(ent)))
+            tvals = np.tile(range(max(1, n // max(1, n_entities))), n_entities)
+            if len(tvals) < n:
+                tvals = np.append(tvals, [tvals[-1]] * (n - len(tvals)))
+            df_panel['entity_id'] = ent[:n]
+            df_panel['time_id'] = tvals[:n]
+            entity_col = 'entity_id'
+            time_col = 'time_id'
+        else:
+            df_panel['entity_id'] = df_panel[entity_col]
+            df_panel['time_id'] = df_panel[time_col]
+            entity_col = 'entity_id'
+            time_col = 'time_id'
+        mask = ~(df_panel[y_col].isna() | df_panel[x_cols].isna().any(axis=1))
+        y = df_panel[y_col][mask]
+        X = df_panel[x_cols][mask]
+        if len(y) < 20:
+            return [{"type": "text", "title": "Hausman", "data": "Insufficient overlapping data for panel analysis."}]
+        fe_results = _fit_fixed_effects_model(y, X, entity_col, df_panel)
+        re_results = _fit_random_effects_model(y, X, entity_col, df_panel)
+        hausman_results = _perform_hausman_test(fe_results, re_results)
+        # Reuse tables from default apply()
+        out = []
+        fe_table = pd.DataFrame({
+            'Variable': fe_results['coefficients'].index,
+            'Coefficient': fe_results['coefficients'].values,
+            'Std. Error': fe_results['std_errors'].values
+        })
+        fe_table['Coefficient'] = fe_table['Coefficient'].round(4)
+        fe_table['Std. Error'] = fe_table['Std. Error'].round(4)
+        out.append({"type": "table", "title": "Fixed Effects Model Results", "data": fe_table})
+        re_table = pd.DataFrame({
+            'Variable': re_results['coefficients'].index,
+            'Coefficient': re_results['coefficients'].values,
+            'Std. Error': re_results['std_errors'].values
+        })
+        re_table['Coefficient'] = re_table['Coefficient'].round(4)
+        out.append({"type": "table", "title": "Random Effects Model Results", "data": re_table})
+        if 'hausman_statistic' in hausman_results:
+            haus_tbl = pd.DataFrame({'Test': ['Hausman Statistic', 'P-value', 'Degrees of Freedom'], 'Value': [hausman_results['hausman_statistic'], hausman_results['p_value'], hausman_results['degrees_of_freedom']]})
+            haus_tbl['Value'] = haus_tbl['Value'].round(4)
+            out.append({"type": "table", "title": "Hausman Test Results", "data": haus_tbl})
+        return out
+    except Exception as exc:
+        return [{"type": "text", "title": "Hausman Test Error", "data": f"Error performing Hausman test: {str(exc)}"}]

@@ -225,7 +225,7 @@ def apply(df: pd.DataFrame, config: dict = None) -> List[dict]:
                 })
                 
                 # Create partial correlation table
-                corr_table = _create_partial_correlation_table(x_clean, y_clean, other_x, x_col, y_col)
+                corr_table = _create_partial_correlation_table(x_clean, y_clean, other_x)
                 outputs.append({
                     "type": "table", 
                     "title": f"Partial Correlation: {x_col}", 

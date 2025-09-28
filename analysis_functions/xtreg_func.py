@@ -603,3 +603,109 @@ def apply(df: pd.DataFrame) -> List[dict]:
     })
     
     return outputs
+
+
+def apply_with_config(df: pd.DataFrame, config: dict) -> List[dict]:
+    """Perform panel regressions using user-provided columns and panel ids.
+
+    Config keys:
+    - y_col: dependent variable
+    - x_cols: list of regressors
+    - entity_col/time_col: panel identifiers if present
+    - create_panel: bool; if true, auto-create ids using n_entities
+    - n_entities: number of entities to synthesize when creating panel ids
+    """
+    outputs: List[dict] = []
+    try:
+        y_col = config.get('y_col')
+        x_cols = config.get('x_cols', [])
+        entity_col = config.get('entity_col')
+        time_col = config.get('time_col')
+        create_panel = config.get('create_panel', False)
+        n_entities = config.get('n_entities')
+        if not y_col or not x_cols:
+            return apply(df)
+        # Build df_panel
+        df_panel = df.copy()
+        if create_panel or not (entity_col and time_col and entity_col in df.columns and time_col in df.columns):
+            # synthesize
+            n = len(df)
+            if not n_entities:
+                n_entities = max(2, min(10, n // 5))
+            ent = np.repeat(range(n_entities), max(1, n // n_entities))
+            if len(ent) < n:
+                ent = np.append(ent, [ent[-1]] * (n - len(ent)))
+            tvals = np.tile(range(max(1, n // max(1, n_entities))), n_entities)
+            if len(tvals) < n:
+                tvals = np.append(tvals, [tvals[-1]] * (n - len(tvals)))
+            df_panel['entity_id'] = ent[:n]
+            df_panel['time_id'] = tvals[:n]
+            entity_col = 'entity_id'
+            time_col = 'time_id'
+        else:
+            # ensure columns exist
+            df_panel['entity_id'] = df_panel[entity_col]
+            df_panel['time_id'] = df_panel[time_col]
+            entity_col = 'entity_id'
+            time_col = 'time_id'
+        # Prepare data
+        mask = ~(df_panel[y_col].isna() | df_panel[x_cols].isna().any(axis=1))
+        y = df_panel[y_col][mask]
+        X = df_panel[x_cols][mask]
+        if len(y) < 10:
+            return [{"type": "text", "title": "Xtreg", "data": "Insufficient overlapping data for panel analysis."}]
+        # Reuse same pipeline as apply()
+        panel_stats = _calculate_panel_statistics(df_panel, entity_col, time_col)
+        panel_summary = pd.DataFrame({
+            'Statistic': ['Number of Entities', 'Time Periods', 'Total Observations', 'Balanced Panel'],
+            'Value': [panel_stats['n_entities'], panel_stats['n_time_periods'], panel_stats['total_observations'], 'Yes' if panel_stats['is_balanced'] else 'No']
+        })
+        outputs.append({"type": "table", "title": "Panel Data Structure", "data": panel_summary})
+        # Pooled OLS
+        try:
+            pooled_results = _fit_pooled_ols(y, X)
+            pooled_coef_table = pd.DataFrame({
+                'Variable': pooled_results['coefficients'].index,
+                'Coefficient': pooled_results['coefficients'].values,
+                'Std. Error': pooled_results['std_errors'].values,
+                't-statistic': pooled_results['t_values'].values,
+                'P-value': pooled_results['p_values'].values
+            })
+            for c in ['Coefficient', 'Std. Error', 't-statistic', 'P-value']:
+                pooled_coef_table[c] = pooled_coef_table[c].round(4)
+            outputs.append({"type": "table", "title": "Pooled OLS Results", "data": pooled_coef_table})
+        except Exception as exc:
+            outputs.append({"type": "text", "title": "Pooled OLS Error", "data": f"Error: {str(exc)}"})
+        # Fixed Effects
+        try:
+            fe_results = _fit_fixed_effects(y, X, entity_col, df_panel)
+            fe_table = pd.DataFrame({
+                'Variable': fe_results['coefficients'].index,
+                'Coefficient': fe_results['coefficients'].values,
+                'Std. Error': fe_results['std_errors'].values,
+                't-statistic': fe_results['t_values'].values,
+                'P-value': fe_results['p_values'].values
+            })
+            for c in ['Coefficient', 'Std. Error', 't-statistic', 'P-value']:
+                fe_table[c] = fe_table[c].round(4)
+            outputs.append({"type": "table", "title": "Fixed Effects Results", "data": fe_table})
+        except Exception as exc:
+            outputs.append({"type": "text", "title": "Fixed Effects Error", "data": f"Error: {str(exc)}"})
+        # Random Effects
+        try:
+            re_results = _fit_random_effects(y, X, entity_col, df_panel)
+            re_table = pd.DataFrame({
+                'Variable': re_results['coefficients'].index,
+                'Coefficient': re_results['coefficients'].values,
+                'Std. Error': re_results['std_errors'].values,
+                't-statistic': re_results['t_values'].values,
+                'P-value': re_results['p_values'].values
+            })
+            for c in ['Coefficient', 'Std. Error', 't-statistic', 'P-value']:
+                re_table[c] = re_table[c].round(4)
+            outputs.append({"type": "table", "title": "Random Effects Results", "data": re_table})
+        except Exception as exc:
+            outputs.append({"type": "text", "title": "Random Effects Error", "data": f"Error: {str(exc)}"})
+        return outputs
+    except Exception as exc:
+        return [{"type": "text", "title": "Xtreg Error", "data": f"Error: {str(exc)}"}]

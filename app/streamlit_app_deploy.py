@@ -14,6 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from analysis_functions import load_functions
+    from analysis_functions.config_interface import get_function_config, FUNCTION_CONFIGS
 except ImportError:
     st.error("Failed to import analysis functions. Please check the deployment setup.")
     st.stop()
@@ -58,6 +59,26 @@ if not selected:
     st.sidebar.warning("Please select at least one function to run.")
 
 run = st.sidebar.button("🚀 Run Analysis", type="primary", disabled=not selected)
+
+# Collect configurations for functions that require them
+configurations: dict = {}
+if uploaded_file is not None and selected:
+    try:
+        df_for_config = pd.read_csv(uploaded_file)
+        # Which selected functions need configuration?
+        config_needed = [f for f in selected if getattr(f, 'display_name', '') in FUNCTION_CONFIGS]
+        if config_needed:
+            st.header("3) Configure Functions")
+            st.markdown("Some functions require variable/parameter selection. Configure them below:")
+            for func in config_needed:
+                with st.expander(f"Configure {func.display_name}", expanded=True):
+                    cfg = get_function_config(func.display_name, df_for_config)
+                    if cfg:
+                        configurations[func.display_name] = cfg
+                    else:
+                        st.warning(f"Configuration incomplete for {func.display_name}")
+    except Exception as exc:
+        st.error(f"❌ Failed to build configuration menus: {exc}")
 
 def _build_report_html(outputs: List[dict]) -> str:
     parts = [
@@ -156,7 +177,19 @@ elif run:
     for i, func in enumerate(selected):
         try:
             status_text.text(f"Running {func.display_name}...")
-            outputs = func.apply(df)
+            # If this function has a collected configuration, pass it through
+            if func.display_name in configurations:
+                cfg = configurations[func.display_name]
+                if hasattr(func, 'apply_with_config'):
+                    outputs = func.apply_with_config(df, cfg)
+                else:
+                    # Try calling apply with config, fallback to apply(df)
+                    try:
+                        outputs = func.apply(df, cfg)
+                    except TypeError:
+                        outputs = func.apply(df)
+            else:
+                outputs = func.apply(df)
             all_outputs.extend(outputs)
             progress_bar.progress((i + 1) / len(selected))
         except Exception as exc:

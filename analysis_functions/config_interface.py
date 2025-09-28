@@ -64,8 +64,8 @@ class PanelDataConfig(FunctionConfig):
     def get_config(self) -> Dict[str, Any]:
         st.subheader(f"Configure {self.function_name}")
         
-        if len(self.numeric_cols) < 3:
-            st.error("Need at least 3 numeric variables for panel data analysis.")
+        if len(self.numeric_cols) < 2:
+            st.error("Need at least 2 numeric variables to configure panel models.")
             return {}
         
         # Dependent variable selection
@@ -90,29 +90,66 @@ class PanelDataConfig(FunctionConfig):
         
         # Panel structure options
         st.markdown("**Panel Structure:**")
-        col1, col2 = st.columns(2)
+        id_guess = next((c for c in self.all_cols if c.lower() in ["id", "entity", "panel", "firm", "country"]), None)
+        time_guess = next((c for c in self.all_cols if c.lower() in ["time", "year", "date", "period", "t"]), None)
+        has_existing = id_guess is not None and time_guess is not None
         
-        with col1:
-            n_entities = st.slider(
-                "Number of entities:",
-                min_value=2,
-                max_value=min(20, len(self.df) // 5),
-                value=min(10, len(self.df) // 5),
-                key=f"{self.function_name}_entities"
-            )
+        use_existing = st.checkbox(
+            "Use existing panel identifiers (entity/time)",
+            value=has_existing,
+            key=f"{self.function_name}_use_existing"
+        )
         
-        with col2:
-            create_panel = st.checkbox(
-                "Create panel structure automatically",
-                value=True,
-                key=f"{self.function_name}_create_panel"
-            )
+        entity_col: Optional[str] = None
+        time_col: Optional[str] = None
+        n_entities: Optional[int] = None
+        create_panel = not use_existing
+        
+        if use_existing:
+            col1, col2 = st.columns(2)
+            with col1:
+                entity_col = st.selectbox(
+                    "Entity ID column:",
+                    self.all_cols,
+                    index=self.all_cols.index(id_guess) if id_guess in self.all_cols else 0,
+                    key=f"{self.function_name}_entity"
+                )
+            with col2:
+                time_col = st.selectbox(
+                    "Time column:",
+                    self.all_cols,
+                    index=self.all_cols.index(time_guess) if time_guess in self.all_cols else 0,
+                    key=f"{self.function_name}_time"
+                )
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                n_entities = st.slider(
+                    "Number of entities to create:",
+                    min_value=2,
+                    max_value=max(2, min(50, max(2, len(self.df) // 3))),
+                    value=min(10, max(2, len(self.df) // 5)),
+                    key=f"{self.function_name}_entities"
+                )
+            with col2:
+                st.caption("Panel identifiers will be auto-generated as `entity_id` and `time_id`.")
+        
+        # Optional: additional fixed effects selection (useful for Areg)
+        fe_cols = st.multiselect(
+            "Fixed effects to absorb (optional):",
+            [c for c in self.all_cols if c not in [y_col] + x_cols],
+            default=[],
+            key=f"{self.function_name}_fe_cols"
+        )
         
         return {
             'y_col': y_col,
             'x_cols': x_cols,
+            'entity_col': entity_col,
+            'time_col': time_col,
             'n_entities': n_entities,
-            'create_panel': create_panel
+            'create_panel': create_panel,
+            'fe_cols': fe_cols,
         }
 
 class IVConfig(FunctionConfig):
@@ -311,6 +348,31 @@ class AvplotConfig(FunctionConfig):
             'control_vars': control_vars
         }
 
+
+class ScatterConfig(FunctionConfig):
+    """Configuration for scatter plots and simple y~x visuals."""
+    def get_config(self) -> Dict[str, Any]:
+        st.subheader(f"Configure {self.function_name}")
+        if len(self.numeric_cols) < 2:
+            st.error("Need at least 2 numeric variables for visualization.")
+            return {}
+        y_col = st.selectbox(
+            "Select dependent variable (Y):",
+            self.numeric_cols,
+            key=f"{self.function_name}_y"
+        )
+        remaining = [c for c in self.numeric_cols if c != y_col]
+        x_cols = st.multiselect(
+            "Select X variables to plot against Y:",
+            remaining,
+            default=remaining[:min(5, len(remaining))],
+            key=f"{self.function_name}_xs"
+        )
+        if not x_cols:
+            st.warning("Please select at least one X variable.")
+            return {}
+        return { 'y_col': y_col, 'x_cols': x_cols }
+
 # Configuration mapping for each function
 FUNCTION_CONFIGS = {
     'Regress': RegressionConfig,
@@ -322,6 +384,8 @@ FUNCTION_CONFIGS = {
     'Collapse': CollapseConfig,
     'Avplot': AvplotConfig,
     'Margins': RegressionConfig,  # Can reuse regression config
+    'Scatter': ScatterConfig,
+    'Twoway': ScatterConfig,
 }
 
 def get_function_config(function_name: str, df: pd.DataFrame) -> Dict[str, Any]:

@@ -88,8 +88,11 @@ if run:
                     if hasattr(func, 'apply_with_config'):
                         outputs = func.apply_with_config(df, config)
                     else:
-                        # Fallback to regular apply if function doesn't support config yet
-                        outputs = func.apply(df)
+                        # Fallback: try apply with config, else plain apply
+                        try:
+                            outputs = func.apply(df, config)  # type: ignore[arg-type]
+                        except TypeError:
+                            outputs = func.apply(df)
                 else:
                     # No configuration needed
                     outputs = func.apply(df)
